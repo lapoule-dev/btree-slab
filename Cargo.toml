@@ -15,9 +15,11 @@ readme = "README.md"
 default = ["std-slab"]
 dot = []
 std-slab = ["slab", "cc-traits/slab"]
+order-16 = []
+order-32 = []
 
 [dependencies]
-smallvec = "1.8.0"
+smallvec = { version = "1.8.0", features = ["const_generics"] }
 cc-traits = "2.0"
 slab = { version = "0.4.5", optional = true }
 

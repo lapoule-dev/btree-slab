@@ -86,11 +86,20 @@
 //! [`btree-range-map`](https://crates.io/crates/btree-range-map) crate.
 use slab::Slab;
 
+#[cfg(feature = "std-slab")]
+mod eighths;
 pub mod generic;
 pub mod utils;
 
+#[cfg(feature = "std-slab")]
+pub use eighths::SlabByEighths;
+
 /// B-Tree map based on `Slab`.
 pub type BTreeMap<K, V> = generic::BTreeMap<K, V, Slab<generic::Node<K, V>>>;
+
+/// B-Tree map based on a `Slab` grown by eighths ([`SlabByEighths`]).
+#[cfg(feature = "std-slab")]
+pub type BTreeMapByEighths<K, V> = generic::BTreeMap<K, V, SlabByEighths<generic::Node<K, V>>>;
 
 /// B-Tree set based on `Slab`.
 pub type BTreeSet<T> = generic::BTreeSet<T, Slab<generic::Node<T, ()>>>;

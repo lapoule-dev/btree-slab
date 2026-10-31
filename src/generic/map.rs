@@ -17,8 +17,15 @@ pub use ext::*;
 
 /// Knuth order of the B-Trees.
 ///
-/// Must be at least 4.
+/// Must be at least 4. 8 by default; the features `order-16` and
+/// `order-32` set 16 and 32 (the larger wins): fewer, fuller nodes, for
+/// maps of many small entries.
+#[cfg(not(any(feature = "order-16", feature = "order-32")))]
 pub const M: usize = 8;
+#[cfg(all(feature = "order-16", not(feature = "order-32")))]
+pub const M: usize = 16;
+#[cfg(feature = "order-32")]
+pub const M: usize = 32;
 
 /// A map based on a B-Tree.
 ///
