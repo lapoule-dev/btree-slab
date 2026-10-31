@@ -2340,6 +2340,56 @@ where
 	}
 }
 
+/// The addresses a range starts and ends at, both in the form the range's
+/// iterators step through: the address of an item, or past the last item
+/// the last valid address.
+///
+/// A key that is not in the tree is found at the leaf address it would be
+/// inserted at, which may be past the end of its leaf: the same place as the
+/// next item, in the parent, but not the same address, so an iterator
+/// stepping from one bound would never meet the other. Such an address is
+/// normalized to the next item's, or to the last valid address past the
+/// last item. An unbounded end is the last valid address.
+fn range_addresses<K, V, C, T, R>(btree: &BTreeMap<K, V, C>, range: &R) -> (Address, Address)
+where
+	C: Slab<Node<K, V>> + SimpleCollectionRef,
+	T: Ord + ?Sized,
+	R: RangeBounds<T>,
+	K: Borrow<T>,
+{
+	let missing = |addr: Address| {
+		btree
+			.normalize(addr)
+			.unwrap_or_else(|| btree.last_valid_address())
+	};
+
+	let start = match range.start_bound() {
+		Bound::Included(start) => match btree.address_of(start) {
+			Ok(addr) => addr,
+			Err(addr) => missing(addr),
+		},
+		Bound::Excluded(start) => match btree.address_of(start) {
+			Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+			Err(addr) => missing(addr),
+		},
+		Bound::Unbounded => btree.first_back_address(),
+	};
+
+	let end = match range.end_bound() {
+		Bound::Included(end) => match btree.address_of(end) {
+			Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+			Err(addr) => missing(addr),
+		},
+		Bound::Excluded(end) => match btree.address_of(end) {
+			Ok(addr) => addr,
+			Err(addr) => missing(addr),
+		},
+		Bound::Unbounded => btree.last_valid_address(),
+	};
+
+	(start, end)
+}
+
 pub struct Range<'a, K, V, C> {
 	/// The tree reference.
 	btree: &'a BTreeMap<K, V, C>,
@@ -2364,29 +2414,7 @@ where
 			panic!("Invalid range")
 		}
 
-		let addr = match range.start_bound() {
-			Bound::Included(start) => match btree.address_of(start) {
-				Ok(addr) => addr,
-				Err(addr) => addr,
-			},
-			Bound::Excluded(start) => match btree.address_of(start) {
-				Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
-				Err(addr) => addr,
-			},
-			Bound::Unbounded => btree.first_back_address(),
-		};
-
-		let end = match range.end_bound() {
-			Bound::Included(end) => match btree.address_of(end) {
-				Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
-				Err(addr) => addr,
-			},
-			Bound::Excluded(end) => match btree.address_of(end) {
-				Ok(addr) => addr,
-				Err(addr) => addr,
-			},
-			Bound::Unbounded => btree.first_back_address(),
-		};
+		let (addr, end) = range_addresses(&*btree, &range);
 
 		Range { btree, addr, end }
 	}
@@ -2420,7 +2448,7 @@ where
 	#[inline]
 	fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
 		if self.addr != self.end {
-			let addr = self.btree.previous_item_address(self.addr).unwrap();
+			let addr = self.btree.previous_item_address(self.end).unwrap();
 			let item = self.btree.item(addr).unwrap();
 			self.end = addr;
 			Some((item.key(), item.value()))
@@ -2455,29 +2483,7 @@ where
 			panic!("Invalid range")
 		}
 
-		let addr = match range.start_bound() {
-			Bound::Included(start) => match btree.address_of(start) {
-				Ok(addr) => addr,
-				Err(addr) => addr,
-			},
-			Bound::Excluded(start) => match btree.address_of(start) {
-				Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
-				Err(addr) => addr,
-			},
-			Bound::Unbounded => btree.first_back_address(),
-		};
-
-		let end = match range.end_bound() {
-			Bound::Included(end) => match btree.address_of(end) {
-				Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
-				Err(addr) => addr,
-			},
-			Bound::Excluded(end) => match btree.address_of(end) {
-				Ok(addr) => addr,
-				Err(addr) => addr,
-			},
-			Bound::Unbounded => btree.first_back_address(),
-		};
+		let (addr, end) = range_addresses(&*btree, &range);
 
 		RangeMut { btree, addr, end }
 	}
@@ -2497,7 +2503,7 @@ where
 	#[inline]
 	fn next_back_item(&mut self) -> Option<&'a mut Item<K, V>> {
 		if self.addr != self.end {
-			let addr = self.btree.previous_item_address(self.addr).unwrap();
+			let addr = self.btree.previous_item_address(self.end).unwrap();
 			let item = self.btree.item_mut(addr).unwrap();
 			self.end = addr;
 			Some(unsafe { std::mem::transmute(item) }) // this is safe because only one mutable reference to the same item can be emitted.s
