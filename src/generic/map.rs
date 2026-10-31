@@ -2037,7 +2037,12 @@ where
 						self.addr = self.btree.next_item_or_back_address(self.addr).unwrap();
 					}
 				}
-				None => return None,
+				// Past the end of a node: the next item, if any, is held
+				// above it (an item removed may leave the address there).
+				None => match self.btree.normalize(self.addr) {
+					Some(addr) => self.addr = addr,
+					None => return None,
+				},
 			}
 		}
 	}
